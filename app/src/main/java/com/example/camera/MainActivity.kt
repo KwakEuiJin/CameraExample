@@ -2,33 +2,28 @@ package com.example.camera
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.display.DisplayManager
 import android.media.MediaScannerConnection
 import android.net.Uri
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.core.ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
 import androidx.camera.core.ImageCapture.FLASH_MODE_AUTO
-import androidx.camera.core.impl.ImageOutputConfig
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.camera.ImageListActivity.Companion.IMAGE_LIST_REQUEST_CODE
-import com.example.camera.extensions.clear
+import com.example.camera.databinding.ActivityMainBinding
 import com.example.camera.extensions.loadCenterCrop
 import com.example.camera.util.PathUtil
-import com.example.camera.databinding.ActivityMainBinding
 import java.io.File
 import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
@@ -66,7 +61,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDisplayChanged(displayId: Int) {
             if (this@MainActivity.displayId == displayId) {
                 if (::imageCapture.isInitialized && root != null) {
-                    imageCapture.targetRotation = root?.display?.rotation ?: ImageOutputConfig.INVALID_ROTATION
+                    imageCapture.targetRotation = root?.display?.rotation ?: -1
                 }
             }
         }
@@ -175,14 +170,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindPreviewImageViewClickListener() = with(binding) {
         previewImageVIew.setOnClickListener {
-            startActivityForResult(
-                ImageListActivity.newIntent(this@MainActivity, uriList),
-                IMAGE_LIST_REQUEST_CODE
-            )
+            startActivity(ImageListActivity.newIntent(this@MainActivity, uriList))
         }
     }
-
-    private var contentUri: Uri? = null
 
     private fun captureCamera() {
         if (!::imageCapture.isInitialized) return
@@ -199,8 +189,7 @@ class MainActivity : AppCompatActivity() {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                 val savedUri = outputFileResults.savedUri ?: Uri.fromFile(photoFile)
                 val rotation = binding.viewFinder.display.rotation // 회전 값 설정
-                contentUri = savedUri
-                updateSavedImageContent()
+                updateSavedImageContent(savedUri)
             }
 
             override fun onError(e: ImageCaptureException) {
@@ -218,25 +207,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateSavedImageContent() {
-        contentUri?.let {
+    private fun updateSavedImageContent(savedUri: Uri) {
             isCapturing = try {
-                val file = File(PathUtil.getPath(this, it) ?: throw FileNotFoundException())
+                val file = File(PathUtil.getPath(this, savedUri) ?: throw FileNotFoundException())
                 MediaScannerConnection.scanFile(this, arrayOf(file.path), arrayOf("image/jpeg"), null)
                 Handler(Looper.getMainLooper()).post {
-                    binding.previewImageVIew.loadCenterCrop(url = it.toString(), corner = 4f)
+                    binding.previewImageVIew.loadCenterCrop(url = savedUri.toString(), corner = 4f)
                 }
                 if (isFlashEnabled) flashLight(false)
-                uriList.add(it)
+                uriList.add(savedUri)
                 false
             } catch (e: FileNotFoundException) {
                 e.printStackTrace()
                 false
             }
-        }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera(binding.viewFinder)
@@ -247,25 +235,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == IMAGE_LIST_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            uriList = data?.getParcelableArrayListExtra(ImageListActivity.URI_LIST_KEY) ?: uriList
-            if (uriList.isNotEmpty()) {
-                binding.previewImageVIew.loadCenterCrop(url = uriList.first().toString(), corner = 4f)
-            } else {
-                binding.previewImageVIew.clear()
-            }
-        }
-    }
-
     companion object {
         const val TAG = "MainActivity"
         private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
 
-        private val LENS_FACING: Int = CameraSelector.LENS_FACING_BACK
+        private const val LENS_FACING: Int = CameraSelector.LENS_FACING_BACK
     }
 
 }
