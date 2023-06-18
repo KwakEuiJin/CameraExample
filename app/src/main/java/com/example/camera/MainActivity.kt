@@ -21,9 +21,12 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.camera.databinding.ActivityMainBinding
 import com.example.camera.extensions.loadCenterCrop
 import com.example.camera.util.PathUtil
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileNotFoundException
 import java.text.SimpleDateFormat
@@ -89,13 +92,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun startCamera(viewFinder: PreviewView) {
         displayManager.registerDisplayListener(displayListener, null)
-
         cameraExecutor = Executors.newSingleThreadExecutor()
-
-        viewFinder.postDelayed({
+        lifecycleScope.launch {
+            delay(10)
             displayId = viewFinder.display.displayId
             bindCameraUseCase()
-        }, 10)
+        }
     }
 
     private fun bindCameraUseCase() = with(binding) {
@@ -211,7 +213,7 @@ class MainActivity : AppCompatActivity() {
             isCapturing = try {
                 val file = File(PathUtil.getPath(this, savedUri) ?: throw FileNotFoundException())
                 MediaScannerConnection.scanFile(this, arrayOf(file.path), arrayOf("image/jpeg"), null)
-                Handler(Looper.getMainLooper()).post {
+                lifecycleScope.launch {
                     binding.previewImageVIew.loadCenterCrop(url = savedUri.toString(), corner = 4f)
                 }
                 if (isFlashEnabled) flashLight(false)
@@ -236,7 +238,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val TAG = "MainActivity"
         const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)

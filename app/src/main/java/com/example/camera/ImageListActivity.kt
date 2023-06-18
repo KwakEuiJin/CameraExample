@@ -6,13 +6,19 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.lifecycle.lifecycleScope
 import coil.load
 import com.example.camera.databinding.ActivityImageListBinding
 import com.example.camera.util.PathUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -55,9 +61,11 @@ class ImageListActivity : AppCompatActivity() {
 
     private fun setupImageList() = with(binding) {
         shareButton.setOnClickListener {
-            val capturedBitmap = captureView(binding.clImageContainer)
-            ivMain.load(capturedBitmap)
-            saveBitmapToFile(capturedBitmap)
+            lifecycleScope.launch {
+                val capturedBitmap = captureView(binding.clImageContainer)
+                ivMain.load(capturedBitmap)
+                saveBitmapToFile(capturedBitmap)
+            }
         }
     }
 
@@ -75,23 +83,25 @@ class ImageListActivity : AppCompatActivity() {
     }
 
 
-
-    private fun saveBitmapToFile(bitmap: Bitmap) {
+    private suspend fun saveBitmapToFile(bitmap: Bitmap) {
+        val parentFilePath = PathUtil.getOutputDirectory(this)
+        val childPath = SimpleDateFormat(
+            MainActivity.FILENAME_FORMAT, Locale.KOREA
+        ).format(System.currentTimeMillis()) + ".jpg"
         // 비트맵을 파일로 저장
-        val file = File(
-            PathUtil.getOutputDirectory(this),
-            SimpleDateFormat(
-                MainActivity.FILENAME_FORMAT, Locale.KOREA
-            ).format(System.currentTimeMillis()) + ".jpg"
-        )
-        try {
+        val file = File(parentFilePath, childPath)
+        withContext(Dispatchers.IO) {
             val fileOutputStream = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fileOutputStream)
-            fileOutputStream.close()
-            // 파일 저장 성공
-        } catch (e: IOException) {
-            e.printStackTrace()
-            // 파일 저장 실패
+            launch {
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 80, fileOutputStream)
+            }
+            try {
+                // 파일 저장 성공
+                fileOutputStream.flush()
+                fileOutputStream.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }
